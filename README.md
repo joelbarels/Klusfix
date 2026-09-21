@@ -1,39 +1,12 @@
-# KlusFix 4.0 — afgeschermde online testomgeving
+# KlusFix — Supabase PostgreSQL
 
-Dit pakket is **deploy-klaar**, maar is **niet door ChatGPT online gezet**. Je hebt zelf een server/VPS, domein en DNS-instelling nodig. Een VPS en domein kunnen geld kosten. Deze opzet is voor een **kleine, besloten test met fictieve gegevens**, niet voor een publieke commerciële lancering.
+## Safe deployment
+1. Keep the current Render service unchanged until a staging deployment works. Back up any surviving SQLite data before deleting anything. This package starts with an empty PostgreSQL database; it does not import old data.
+2. In Supabase SQL Editor execute `schema.sql` once. The schema uses separate `kf_` tables, enables RLS and revokes anon/authenticated access. Never use the Supabase service-role key in browser code.
+3. Supabase > Connect > Transaction pooler: copy the COMPLETE URI (port 6543) and replace its password with your database password, percent-encoding reserved characters. Store the entire URI only as `DATABASE_URL` in Render Environment. Do not put it in GitHub, screenshots, or chat. The code uses TLS and unnamed parameterized queries.
+4. Upload this package's files to the repository root, replacing old `server.js`, `app.js`, `Dockerfile`, `sw.js`; retain your existing `index.html`, `style.css`, `icon.svg`, and `manifest.webmanifest` supplied in this package. Set Render runtime Docker, Dockerfile path `./Dockerfile`, and `DATABASE_URL`, optionally `GEMINI_API_KEY`. Do not use `DB_PATH` or SQLite on this deployment. `PORT` can be set to 8080.
+5. Prefer a separate staging Render service and test account registration, login, logout, reporting, matching, request, quote, quote acceptance, and login again after redeploy. Only then switch the live service. Existing SQLite accounts do not automatically migrate.
+6. Backups: arrange periodic Supabase database backups/exports and test restores; retention and availability depend on your Supabase plan.
 
-## Voorbereiding
-
-1. Regel een Linux-server met Docker Engine + Docker Compose-plugin, een domein en een A-record `test.jouwdomein.nl` naar het publieke IP van je server. Open poorten 80 en 443 in de firewall.
-2. Kopieer deze map naar de server. Voer in deze map uit: `cp .env.example .env`.
-3. Maak een sterk testwachtwoord. Genereer de hash met `docker run --rm caddy:2-alpine caddy hash-password --plaintext 'JE_STERKE_TESTWACHTWOORD'`. Zet de volledige hash in `.env` bij `TEST_PASSWORD_HASH` **tussen enkele quotes**. Gebruik geen letterlijke voorbeeldhash.
-4. Zet je echte testdomein in `.env` bij `APP_DOMAIN`. Voeg eventueel `GEMINI_API_KEY` toe. Zonder sleutel geeft de app uitsluitend basisregels en geen AI-fotoanalyse.
-5. Start: `docker compose up -d --build`. Controleer: `docker compose ps` en `docker compose logs --tail=100 proxy app`.
-6. Open `https://test.jouwdomein.nl` op je telefoon. De browser vraagt om de testgebruikersnaam en het testwachtwoord. Daarna registreer je binnen KlusFix afzonderlijke testaccounts als consument en vakman.
-
-Caddy regelt automatisch HTTPS wanneer DNS, domein en poorten correct zijn ingesteld. Publiceer geen API-sleutels, echte klantgegevens of `.env`.
-
-## Wat is nieuw in versie 4
-
-- Dockerfile en Compose voor reproduceerbare serverinstallatie.
-- HTTPS reverse proxy via Caddy met extra wachtwoord vóór de hele testapp.
-- SQLite-bestand staat op een blijvend Docker-volume (`klusfix_data`) en blijft behouden na een normale containerherstart.
-- API-sleutel staat uitsluitend als serveromgevingvariabele ingesteld.
-- Serverfouten geven geen interne foutdetails meer terug aan bezoekers.
-
-## Back-up en verwijderen
-
-Stop de app voor een consistente back-up: `docker compose stop app`. Kopieer de database uit het volume met `docker compose run --rm --entrypoint sh app -c 'cat /data/klusfix.sqlite' > klusfix-backup.sqlite` (bewaar de back-up versleuteld en buiten de server). Herstart met `docker compose start app`. Verwijder het volume **niet** met `docker compose down -v`, tenzij je de database bewust wilt wissen.
-
-## Beperkingen / voor publieke lancering vereist
-
-- Geen automatische bedrijf-/identiteitsverificatie, wachtwoordreset, e-mailbevestiging, accountverwijdering of privacy-/bewaarbeleid.
-- Geen rate limiting, anti-spam, CSRF-bescherming voor browser-gebaseerde basic-auth, of uitgewerkte logging-/incidentprocedures. Beperk testaccounts tot vertrouwde personen.
-- Geen werkelijke betalingen, kaart/locatiezoekfunctie of PDF-export.
-- De app slaat geen foto's in de database op; foto's worden bij toestemming tijdelijk naar de AI-dienst gestuurd. Gebruik uitsluitend fictieve testfoto's en deel geen herkenbare personen/adressen.
-- Deze configuratie is niet gratis gegarandeerd: server, domein en AI-gebruik kunnen kosten meebrengen.
-- De PWA-installatie en offline cache moeten op het gekozen apparaat en de browser worden getest.
-
-## Lokaal zonder Docker
-
-Node.js 24+: `node server.js` en open `http://localhost:8080`. Dit is alleen voor lokaal testen; het heeft geen externe HTTPS-toegangsbeveiliging.
+## Security notes
+This is a private-test implementation, not a security-audited public marketplace. Add verified email, password reset, abuse controls, rate limiting, moderation, data retention, and privacy/consent documentation before public launch. Database access is via server-only credentials. No Supabase Auth migration is implied: existing KlusFix password hashes remain in the application-managed `kf_users` table, and new users use the same hashing method. For tighter least privilege, create a dedicated restricted PostgreSQL login with table-specific permissions and use its connection URI rather than the default administrative database account.
