@@ -51,3 +51,12 @@ main{max-width:1240px;padding:12px 28px 55px}
 
 /* Alleen de uitnodiging voor vakmannen op het openbare beginscherm. */
 .pro-invite{background:linear-gradient(110deg,#1b4937,#15392d);border:1px solid #49d99a;border-radius:17px;padding:16px 18px;margin:0 0 20px;box-shadow:0 8px 26px #07181044}.pro-invite-top{display:flex;align-items:center;gap:14px;margin-bottom:12px}.pro-invite-icon{display:grid;place-items:center;flex:none;width:49px;height:49px;border-radius:13px;background:#315b44;color:#ffd66d;font-size:31px;font-weight:700}.pro-invite-top>div{display:flex;flex-direction:column;gap:3px}.pro-invite-eyebrow{font-size:10px;font-weight:800;letter-spacing:1px;color:#62e7ad}.pro-invite-top strong{font-size:20px;color:#fff}.pro-invite-top small{color:#c8ddd2;line-height:1.4}.pro-signup-btn{display:flex;justify-content:space-between;align-items:center;width:100%;margin:0;background:#47dc9e;border:1px solid #47dc9e;border-radius:10px;color:#092a1c;font-weight:800;text-align:left}.pro-signup-btn:hover,.pro-signup-btn:focus-visible{background:#70edb8;border-color:#70edb8}@media(max-width:650px){.pro-invite{padding:13px;margin-bottom:17px}.pro-invite-top strong{font-size:17px}.pro-invite-top small{font-size:12px}}
+
+/* Stap 2: toon uitsluitend het vakgebied dat in stap 1 is gekozen. */
+.chosen-category{display:block;margin:12px 0 22px}
+.chosen-category-card{display:flex;align-items:center;gap:14px;background:#1b4033;border:1px solid #42ce94;border-radius:15px;padding:15px 18px;min-height:96px}
+.chosen-category-card .landing-icon{display:flex;align-items:center;justify-content:center;flex:0 0 52px}
+.chosen-category-card .landing-copy{min-width:0}
+.chosen-category-card .landing-copy strong{font-size:clamp(17px,2vw,23px)}
+.chosen-check{margin-left:auto;color:#48dda1;font-size:25px}
+#report>label:first-of-type{margin-top:12px}
