@@ -25,6 +25,32 @@ const safe=u=>({id:u.id,email:u.email,role:u.role,name:u.name,trade:u.trade,post
 function send(res,status,obj){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(obj))}
 function bad(status,message){let e=Error(message);e.status=status;throw e}
 async function read(req){return new Promise((resolve,reject)=>{let chunks=[],size=0,done=false;req.on('data',c=>{size+=c.length;if(size>7e6){done=true;reject(Object.assign(Error('Aanvraag te groot'),{status:413}));req.destroy()}else chunks.push(c)});req.on('end',()=>{if(done)return;try{resolve(JSON.parse(Buffer.concat(chunks).toString()||'{}'))}catch{reject(Object.assign(Error('Ongeldige JSON'),{status:400}))}});req.on('error',reject)})}
+// Loginbescherming: 5 mislukte pogingen per account en 50 per netwerk in 15 minuten.
+// In-memory: herstart wist de tellers; voor meerdere instanties is gedeelde opslag nodig.
+const loginWindow=15*60*1000, loginAccount=new Map(), loginNetwork=new Map();
+function loginBucket(map,id,now){
+  let item=map.get(id);
+  if(!item||now>=item.until){item={count:0,until:now+loginWindow};map.set(id,item)}
+  return item;
+}
+function loginIdentity(req){
+  // Vertrouw X-Forwarded-For niet blind: dit kan door een client worden vervalst.
+  // Socketadres is conservatief; achter een proxy kan dit meerdere gebruikers delen.
+  return String(req.socket.remoteAddress||'unknown');
+}
+function checkLoginLimit(email,ip){
+  const now=Date.now();
+  if(loginBucket(loginAccount,email,now).count>=5||loginBucket(loginNetwork,ip,now).count>=50)
+    bad(429,'Te veel inlogpogingen. Probeer het over 15 minuten opnieuw.');
+}
+function failedLogin(email,ip){
+  const now=Date.now();
+  loginBucket(loginAccount,email,now).count++;
+  loginBucket(loginNetwork,ip,now).count++;
+  if(loginAccount.size>10000||loginNetwork.size>10000){
+    for(const map of [loginAccount,loginNetwork])for(const [k,v] of map)if(now>=v.until)map.delete(k);
+  }
+}
 async function auth(req){let t=(req.headers.authorization||'').match(/^Bearer ([a-f0-9]{64})$/)?.[1];if(!t)return null;return (await q('SELECT u.* FROM public.kf_users u JOIN public.kf_sessions s ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires>$2',[sha(t),Date.now()]))[0]||null}
 async function login(res,u){let t=crypto.randomBytes(32).toString('hex');await q('INSERT INTO public.kf_sessions(token_hash,user_id,expires) VALUES($1,$2,$3)',[sha(t),u.id,Date.now()+7*864e5]);send(res,200,{token:t,user:safe(u)})}
 function fallback(cat,desc){return {source:'basisregels',urgency:/gaslucht|rook|vonken|brand|stroom op water/i.test(desc)?'Spoed':'Onbekend',possibleCauses:['Oorzaak niet vastgesteld; inspectie ter plaatse nodig'],advice:'Laat het probleem door een geschikte vakman beoordelen. Bij direct gevaar: ga naar een veilige plek en bel indien nodig 112.',trade:trades[cat]||'Allround klusbedrijf',disclaimer:'Geen diagnose. De foto is niet door AI beoordeeld.'}}
@@ -65,7 +91,27 @@ async function analyze(b){
 async function api(req,res,url){let route=url.pathname,m=req.method,b=['POST','PATCH'].includes(m)?await read(req):{};
 if(route==='/api/status'&&m==='GET'){await q('SELECT 1');return send(res,200,{database:'PostgreSQL',aiConfigured:!!key,mode:'private-test'})}
 if(route==='/api/register'&&m==='POST'){let email=String(b.email||'').trim().toLowerCase(),pw=String(b.password||''),name=String(b.name||'').trim(),role=b.role;if(!/^\S+@\S+\.\S+$/.test(email)||pw.length<10||pw.length>256||!name||name.length>120||!['consument','vakman'].includes(role))bad(400,'Vul naam, geldig e-mailadres en wachtwoord van minimaal 10 tekens in.');if(role==='vakman'&&!Object.values(trades).concat('Allround klusbedrijf').includes(b.trade))bad(400,'Kies een vakgebied.');let salt=crypto.randomBytes(16).toString('hex'),hash=salt+':'+crypto.scryptSync(pw,salt,64).toString('hex');try{let u=(await q('INSERT INTO public.kf_users(id,email,hash,role,name,trade,postcode) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[uid(),email,hash,role,name,role==='vakman'?b.trade:'',String(b.postcode||'').slice(0,20)]))[0];return login(res,u)}catch(e){if(e.code==='23505')bad(409,'Dit e-mailadres is al geregistreerd.');throw e}}
-if(route==='/api/login'&&m==='POST'){let u=(await q('SELECT * FROM public.kf_users WHERE email=$1',[String(b.email||'').trim().toLowerCase()]))[0];if(!u)bad(401,'Ongeldige inloggegevens');let [salt,stored]=u.hash.split(':'),actual=crypto.scryptSync(String(b.password||''),salt,64),expected=Buffer.from(stored,'hex');if(expected.length!==actual.length||!crypto.timingSafeEqual(actual,expected))bad(401,'Ongeldige inloggegevens');return login(res,u)}
+if(route==='/api/login'&&m==='POST'){
+  const email=String(b.email||'').trim().toLowerCase().slice(0,254);
+  const ip=loginIdentity(req);
+  checkLoginLimit(email,ip);
+  const u=(await q('SELECT * FROM public.kf_users WHERE email=$1',[email]))[0];
+  let valid=false;
+  if(u&&typeof u.hash==='string'){
+    const [salt,stored]=u.hash.split(':');
+    const expected=Buffer.from(stored||'','hex');
+    const actual=crypto.scryptSync(String(b.password||''),salt,64);
+    valid=expected.length===actual.length&&crypto.timingSafeEqual(actual,expected);
+  }
+  if(!valid){
+    failedLogin(email,ip);
+    if(loginAccount.get(email).count>=5||loginNetwork.get(ip).count>=50)
+      bad(429,'Te veel inlogpogingen. Probeer het over 15 minuten opnieuw.');
+    bad(401,'Ongeldige inloggegevens');
+  }
+  loginAccount.delete(email);
+  return login(res,u);
+}
 let u=await auth(req);if(!u)bad(401,'Log eerst in.');
 if(route==='/api/logout'&&m==='POST'){await q('DELETE FROM public.kf_sessions WHERE token_hash=$1',[sha((req.headers.authorization||'').slice(7))]);return send(res,200,{ok:true})}
 if(route==='/api/me'&&m==='GET')return send(res,200,{user:safe(u)});
