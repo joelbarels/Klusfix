@@ -1,0 +1,99 @@
+'use strict';
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const dns=require('node:dns').promises;
+const {Pool}=require('pg');
+if(!process.env.DATABASE_URL)throw Error('DATABASE_URL ontbreekt');
+let databaseUrl;
+try {
+  databaseUrl=new URL(process.env.DATABASE_URL.trim());
+  if(!['postgresql:','postgres:'].includes(databaseUrl.protocol)||!databaseUrl.hostname||!databaseUrl.username)throw Error('Ongeldige PostgreSQL-verbindingslink');
+} catch(e) { console.error('Databaseconfiguratie ongeldig:',e.message); process.exit(1); }
+// Laat de bestaande werkende TLS-instelling intact totdat de CA-keten is geverifieerd.
+const pool=new Pool({connectionString:process.env.DATABASE_URL.trim(),ssl:process.env.SUPABASE_DB_CA?{ca:process.env.SUPABASE_DB_CA.replace(/\\n/g,'\n'),rejectUnauthorized:true}:{rejectUnauthorized:false},max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});
+pool.on('error',e=>console.error('Databasepoolfout:',e.code||e.message));
+async function checkDatabase(){
+  console.log('Databasecontrole: gestart (poort '+(databaseUrl.port||'5432')+')');
+  try { await dns.lookup(databaseUrl.hostname); console.log('Databasecontrole: DNS geslaagd'); }
+  catch(e){console.error('Databasecontrole: DNS mislukt:',e.code||e.message);return;}
+  try {await pool.query('SELECT 1');console.log('Databasecontrole: PostgreSQL geslaagd');}
+  catch(e){console.error('Databasecontrole: PostgreSQL mislukt:',e.code||e.message);}
+}
+const q=(sql,args=[])=>pool.query(sql,args).then(r=>r.rows);
+const uid=()=>crypto.randomUUID(), sha=s=>crypto.createHash('sha256').update(s).digest('hex');
+const key=process.env.GEMINI_API_KEY||'',port=Number(process.env.PORT||8080);
+// Basisbescherming per serverinstantie; bij meerdere instanties is gedeelde opslag nodig.
+const limits=new Map();
+function limit(req,scope,identity,max,windowMs){
+  const ip=req.socket.remoteAddress||'unknown'; // Geen ongecontroleerde X-Forwarded-For headers vertrouwen.
+  const id=scope+':'+ip+':'+identity;
+  const now=Date.now();
+  if(limits.size>10000){for(const [k,v] of limits)if(v.until<=now)limits.delete(k);}
+  const entry=limits.get(id);
+  if(!entry||entry.until<=now){limits.set(id,{count:1,until:now+windowMs});return;}
+  entry.count++;
+  if(entry.count>max)bad(429,'Te veel verzoeken. Probeer het later opnieuw.');
+}
+const trades={lekkage:'Loodgieter',elektra:'Elektricien',verwarming:'Installateur',sanitair:'Loodgieter',dak:'Dakdekker',muren:'Stukadoor',vloer:'Vloerspecialist',deuren:'Timmerman',schimmel:'Vochtbestrijder',tuin:'Hovenier',ongedierte:'Ongediertebestrijder',apparatuur:'Reparateur'};
+const safe=u=>({id:u.id,email:u.email,role:u.role,name:u.name,trade:u.trade,postcode:u.postcode});
+function send(res,status,obj){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY'});res.end(JSON.stringify(obj))}
+function bad(status,message){let e=Error(message);e.status=status;throw e}
+async function read(req){return new Promise((resolve,reject)=>{let chunks=[],size=0,done=false;req.on('data',c=>{size+=c.length;if(size>7e6){done=true;reject(Object.assign(Error('Aanvraag te groot'),{status:413}));req.destroy()}else chunks.push(c)});req.on('end',()=>{if(done)return;try{resolve(JSON.parse(Buffer.concat(chunks).toString()||'{}'))}catch{reject(Object.assign(Error('Ongeldige JSON'),{status:400}))}});req.on('error',reject)})}
+async function auth(req){let t=(req.headers.authorization||'').match(/^Bearer ([a-f0-9]{64})$/)?.[1];if(!t)return null;return (await q('SELECT u.* FROM public.kf_users u JOIN public.kf_sessions s ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires>$2',[sha(t),Date.now()]))[0]||null}
+async function login(res,u){let t=crypto.randomBytes(32).toString('hex');await q('INSERT INTO public.kf_sessions(token_hash,user_id,expires) VALUES($1,$2,$3)',[sha(t),u.id,Date.now()+7*864e5]);send(res,200,{token:t,user:safe(u)})}
+function fallback(cat,desc){return {source:'basisregels',urgency:/gaslucht|rook|vonken|brand|stroom op water/i.test(desc)?'Spoed':'Onbekend',possibleCauses:['Oorzaak niet vastgesteld; inspectie ter plaatse nodig'],advice:'Laat het probleem door een geschikte vakman beoordelen. Bij direct gevaar: ga naar een veilige plek en bel indien nodig 112.',trade:trades[cat]||'Allround klusbedrijf',disclaimer:'Geen diagnose. De foto is niet door AI beoordeeld.'}}
+async function analyze(b){
+  const base=fallback(b.category,b.description);
+  if(!key)return base;
+  const parts=[{text:`Je bent een voorzichtige Nederlandstalige triage-assistent voor woningproblemen. Geef uitsluitend JSON met keys urgency (Spoed, Hoog, Normaal of Onbekend), possibleCauses (max 3 korte mogelijke oorzaken), advice (max 100 woorden), trade (vakman). Beschrijf onzekerheid; geen definitieve diagnose of aansprakelijkheid. Bij mogelijk gas, elektriciteit, brand of constructiegevaar adviseer direct veilig handelen en professionele hulp. Categorie: ${String(b.category).slice(0,50)}. Omschrijving: ${String(b.description).slice(0,2000)}`}];
+  if(b.image&&/^data:image\/(jpeg|png|webp);base64,/.test(b.image)){
+    const [head,data]=b.image.split(',');
+    if(data.length<5e6)parts.push({inline_data:{mime_type:head.slice(5,-7),data}});
+  }
+  // Modelbeschikbaarheid verschilt per API-sleutel; 404/429/503 proberen een alternatief.
+  const models=['gemini-3.5-flash-lite','gemini-3.7-flash'];
+  for(const model of models){
+    try{
+      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+        method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
+        body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),
+        signal:AbortSignal.timeout(20000)
+      });
+      if(!r.ok){
+        console.error('Gemini model mislukt:',model,'HTTP',r.status);
+        if([404,429,500,502,503,504].includes(r.status))continue;
+        throw Error('Gemini HTTP '+r.status);
+      }
+      const j=await r.json();
+      const raw=j.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
+      const v=JSON.parse(raw);
+      if(!v||typeof v!=='object'||Array.isArray(v)||!Array.isArray(v.possibleCauses)||typeof v.advice!=='string')throw Error('Ongeldig Gemini antwoord');
+      return {...base,urgency:['Spoed','Hoog','Normaal','Onbekend'].includes(v.urgency)?v.urgency:base.urgency,
+        possibleCauses:v.possibleCauses.slice(0,3).map(x=>String(x).slice(0,200)),
+        advice:v.advice.slice(0,1000),trade:trades[b.category],source:'gemini',
+        disclaimer:'AI-inschatting, geen definitieve diagnose.'};
+    }catch(e){console.error('Gemini analyse mislukt:',model,e.name==='TimeoutError'?'timeout':e.message);}
+  }
+  throw Error('Geen Gemini-model beschikbaar');
+}
+async function api(req,res,url){let route=url.pathname,m=req.method,b=['POST','PATCH'].includes(m)?await read(req):{};
+if(route==='/api/status'&&m==='GET'){await q('SELECT 1');return send(res,200,{database:'PostgreSQL',aiConfigured:!!key,mode:'private-test'})}
+if(route==='/api/register'&&m==='POST'){limit(req,'register','',5,60*60*1000);let email=String(b.email||'').trim().toLowerCase(),pw=String(b.password||''),name=String(b.name||'').trim(),role=b.role;if(!/^\S+@\S+\.\S+$/.test(email)||pw.length<10||pw.length>256||!name||name.length>120||!['consument','vakman'].includes(role))bad(400,'Vul naam, geldig e-mailadres en wachtwoord van minimaal 10 tekens in.');if(role==='vakman'&&!Object.values(trades).concat('Allround klusbedrijf').includes(b.trade))bad(400,'Kies een vakgebied.');let salt=crypto.randomBytes(16).toString('hex'),hash=salt+':'+crypto.scryptSync(pw,salt,64).toString('hex');try{let u=(await q('INSERT INTO public.kf_users(id,email,hash,role,name,trade,postcode) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[uid(),email,hash,role,name,role==='vakman'?b.trade:'',String(b.postcode||'').slice(0,20)]))[0];return login(res,u)}catch(e){if(e.code==='23505')bad(409,'Dit e-mailadres is al geregistreerd.');throw e}}
+if(route==='/api/login'&&m==='POST'){limit(req,'login',String(b.email||'').trim().toLowerCase().slice(0,254),10,15*60*1000);let u=(await q('SELECT * FROM public.kf_users WHERE email=$1',[String(b.email||'').trim().toLowerCase()]))[0];if(!u)bad(401,'Ongeldige inloggegevens');let [salt,stored]=u.hash.split(':'),actual=crypto.scryptSync(String(b.password||''),salt,64),expected=Buffer.from(stored,'hex');if(expected.length!==actual.length||!crypto.timingSafeEqual(actual,expected))bad(401,'Ongeldige inloggegevens');return login(res,u)}
+let u=await auth(req);if(!u)bad(401,'Log eerst in.');
+if(route==='/api/logout'&&m==='POST'){await q('DELETE FROM public.kf_sessions WHERE token_hash=$1',[sha((req.headers.authorization||'').slice(7))]);return send(res,200,{ok:true})}
+if(route==='/api/me'&&m==='GET')return send(res,200,{user:safe(u)});
+if(route==='/api/analyze'&&m==='POST'){limit(req,'analyze',u.id,5,60*60*1000);if(u.role!=='consument')bad(403,'Alleen voor consumenten');if(!trades[b.category]||!String(b.description||'').trim())bad(400,'Selecteer categorie en omschrijving');if(b.image&&!b.aiConsent)bad(400,'Geef toestemming voor fotoanalyse');try{return send(res,200,{analysis:await analyze(b)})}catch(e){console.error('Gemini fallback:',e.code||e.name||'onbekend');return send(res,200,{analysis:fallback(b.category,b.description),aiUnavailable:true})}}
+if(route==='/api/cases'&&m==='POST'){if(u.role!=='consument')bad(403,'Alleen voor consumenten');if(!trades[b.category]||!String(b.description||'').trim()||!String(b.postcode||'').trim())bad(400,'Categorie, omschrijving en postcode verplicht');let a=fallback(b.category,b.description);if(b.analysis&&typeof b.analysis==='object')a={source:['gemini','basisregels'].includes(b.analysis.source)?b.analysis.source:'basisregels',urgency:String(b.analysis.urgency||'Onbekend').slice(0,40),possibleCauses:Array.isArray(b.analysis.possibleCauses)?b.analysis.possibleCauses.slice(0,3).map(x=>String(x).slice(0,200)):a.possibleCauses,advice:String(b.analysis.advice||'').slice(0,1000),trade:trades[b.category],disclaimer:'Indicatie, geen diagnose.'};let id=uid();await q('INSERT INTO public.kf_cases(id,owner_id,category,description,postcode,analysis) VALUES($1,$2,$3,$4,$5,$6)',[id,u.id,b.category,String(b.description).slice(0,3000),String(b.postcode).slice(0,20),JSON.stringify(a)]);return send(res,201,{id})}
+if(route==='/api/cases'&&m==='GET')return send(res,200,{cases:await q('SELECT * FROM public.kf_cases WHERE owner_id=$1 ORDER BY created DESC',[u.id])});
+if(route==='/api/trades'&&m==='GET')return send(res,200,{trades:await q('SELECT id,name,trade,postcode FROM public.kf_users WHERE role=$1 AND trade=$2',['vakman',url.searchParams.get('trade')||''])});
+if(route==='/api/requests'&&m==='POST'){if(u.role!=='consument')bad(403,'Alleen voor consumenten');let c=(await q('SELECT * FROM public.kf_cases WHERE id=$1 AND owner_id=$2',[b.caseId,u.id]))[0],t=(await q('SELECT * FROM public.kf_users WHERE id=$1 AND role=$2',[b.tradeId,'vakman']))[0];if(!c||!t||c.analysis.trade!==t.trade)bad(400,'Ongeldige aanvraag of vakman');try{let id=uid();await q('INSERT INTO public.kf_requests(id,case_id,trade_id) VALUES($1,$2,$3)',[id,c.id,t.id]);return send(res,201,{id})}catch(e){if(e.code==='23505')bad(409,'Deze aanvraag is al verstuurd');throw e}}
+if(route==='/api/requests'&&m==='GET'){let rows=u.role==='vakman'?await q('SELECT r.*,c.category,c.description,c.postcode,c.analysis,x.name AS customer FROM public.kf_requests r JOIN public.kf_cases c ON c.id=r.case_id JOIN public.kf_users x ON x.id=c.owner_id WHERE r.trade_id=$1 ORDER BY r.created DESC',[u.id]):await q('SELECT r.*,x.name AS "tradeName",x.trade,c.description FROM public.kf_requests r JOIN public.kf_users x ON x.id=r.trade_id JOIN public.kf_cases c ON c.id=r.case_id WHERE c.owner_id=$1 ORDER BY r.created DESC',[u.id]);return send(res,200,{requests:rows})}
+if(route==='/api/quotes'&&m==='POST'){if(u.role!=='vakman')bad(403,'Alleen voor vakmannen');let r=(await q('SELECT id FROM public.kf_requests WHERE id=$1 AND trade_id=$2',[b.requestId,u.id]))[0],amount=Number(b.amountCents),details=String(b.details||'').trim();if(!r)bad(404,'Aanvraag niet gevonden');if(!Number.isSafeInteger(amount)||amount<100||amount>100000000||details.length<10||details.length>2000)bad(400,'Vul een geldig bedrag en omschrijving van 10 tot 2000 tekens in');try{let id=uid();await q('INSERT INTO public.kf_quotes(id,request_id,trade_id,amount_cents,details) VALUES($1,$2,$3,$4,$5)',[id,r.id,u.id,amount,details]);return send(res,201,{id})}catch(e){if(e.code==='23505')bad(409,'Voor deze aanvraag is al een offerte ingediend');throw e}}
+if(route==='/api/quotes'&&m==='GET'){let rows=u.role==='vakman'?await q('SELECT * FROM public.kf_quotes WHERE trade_id=$1 ORDER BY created DESC',[u.id]):await q('SELECT q.*,x.name AS "tradeName" FROM public.kf_quotes q JOIN public.kf_requests r ON r.id=q.request_id JOIN public.kf_cases c ON c.id=r.case_id JOIN public.kf_users x ON x.id=q.trade_id WHERE c.owner_id=$1 ORDER BY q.created DESC',[u.id]);return send(res,200,{quotes:rows})}
+if(/^\/api\/quotes\/[0-9a-f-]+$/.test(route)&&m==='PATCH'){if(u.role!=='consument'||!['geaccepteerd','afgewezen'].includes(b.status))bad(403,'Niet toegestaan');let id=route.split('/')[3],rows=await q('UPDATE public.kf_quotes q SET status=$1 FROM public.kf_requests r JOIN public.kf_cases c ON c.id=r.case_id WHERE q.id=$2 AND q.request_id=r.id AND c.owner_id=$3 AND q.status=$4 RETURNING q.id',[b.status,id,u.id,'aangeboden']);if(!rows.length)bad(409,'Offerte niet gevonden of al beoordeeld');return send(res,200,{ok:true})}
+if(/^\/api\/requests\/[0-9a-f-]+$/.test(route)&&m==='PATCH'){if(u.role!=='vakman'||!['nieuw','in behandeling','afgerond'].includes(b.status))bad(403,'Niet toegestaan');let rows=await q('UPDATE public.kf_requests SET status=$1 WHERE id=$2 AND trade_id=$3 RETURNING id',[b.status,route.split('/')[3],u.id]);if(!rows.length)bad(404,'Niet gevonden');return send(res,200,{ok:true})}
+bad(404,'Niet gevonden')}
+const files={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/style.css':'style.css','/sw.js':'sw.js','/icon.svg':'icon.svg','/manifest.webmanifest':'manifest.webmanifest'};
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml'};
+const server=http.createServer(async(req,res)=>{try{let url=new URL(req.url,'http://localhost');if(url.pathname.startsWith('/api/'))return await api(req,res,url);let file=files[url.pathname];if(!file)bad(404,'Niet gevonden');let data=await fs.promises.readFile(path.join(__dirname,file));res.writeHead(200,{'Content-Type':mime[path.extname(file)],'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});res.end(data)}catch(e){if(!res.headersSent){if(!e.status)console.error('Serverfout:',e.code||e.message);send(res,e.status||500,{error:e.status?e.message:'Er is iets misgegaan.'})}}});
+server.listen(port,'0.0.0.0',()=>{console.log('KlusFix PostgreSQL listening on',port);checkDatabase().catch(e=>console.error('Databasecontrole onverwachte fout:',e.code||e.message));});
