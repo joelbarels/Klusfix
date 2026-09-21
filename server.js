@@ -1,8 +1,22 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const dns=require('node:dns').promises;
 const {Pool}=require('pg');
 if(!process.env.DATABASE_URL)throw Error('DATABASE_URL ontbreekt');
-const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:true},max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});
+let databaseUrl;
+try {
+  databaseUrl=new URL(process.env.DATABASE_URL.trim());
+  if(!['postgresql:','postgres:'].includes(databaseUrl.protocol)||!databaseUrl.hostname||!databaseUrl.username)throw Error('Ongeldige PostgreSQL-verbindingslink');
+} catch(e) { console.error('Databaseconfiguratie ongeldig:',e.message); process.exit(1); }
+const pool=new Pool({connectionString:process.env.DATABASE_URL.trim(),ssl:{rejectUnauthorized:true},max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});
+pool.on('error',e=>console.error('Databasepoolfout:',e.code||e.message));
+async function checkDatabase(){
+  console.log('Databasecontrole: gestart (poort '+(databaseUrl.port||'5432')+')');
+  try { await dns.lookup(databaseUrl.hostname); console.log('Databasecontrole: DNS geslaagd'); }
+  catch(e){console.error('Databasecontrole: DNS mislukt:',e.code||e.message);return;}
+  try {await pool.query('SELECT 1');console.log('Databasecontrole: PostgreSQL geslaagd');}
+  catch(e){console.error('Databasecontrole: PostgreSQL mislukt:',e.code||e.message);}
+}
 const q=(sql,args=[])=>pool.query(sql,args).then(r=>r.rows);
 const uid=()=>crypto.randomUUID(), sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const key=process.env.GEMINI_API_KEY||'',port=Number(process.env.PORT||8080);
@@ -36,4 +50,4 @@ bad(404,'Niet gevonden')}
 const files={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/style.css':'style.css','/sw.js':'sw.js','/icon.svg':'icon.svg','/manifest.webmanifest':'manifest.webmanifest'};
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml'};
 const server=http.createServer(async(req,res)=>{try{let url=new URL(req.url,'http://localhost');if(url.pathname.startsWith('/api/'))return await api(req,res,url);let file=files[url.pathname];if(!file)bad(404,'Niet gevonden');let data=await fs.promises.readFile(path.join(__dirname,file));res.writeHead(200,{'Content-Type':mime[path.extname(file)],'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Frame-Options':'DENY','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"});res.end(data)}catch(e){if(!res.headersSent){if(!e.status)console.error('Serverfout:',e.code||e.message);send(res,e.status||500,{error:e.status?e.message:'Er is iets misgegaan.'})}}});
-server.listen(port,'0.0.0.0',()=>console.log('KlusFix PostgreSQL listening on',port));
+server.listen(port,'0.0.0.0',()=>{console.log('KlusFix PostgreSQL listening on',port);checkDatabase().catch(e=>console.error('Databasecontrole onverwachte fout:',e.code||e.message));});
