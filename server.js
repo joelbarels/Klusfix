@@ -63,13 +63,13 @@ async function analyze(b){
     if(data.length<5e6)parts.push({inline_data:{mime_type:head.slice(5,-7),data}});
   }
   // Modelbeschikbaarheid verschilt per API-sleutel; 404/429/503 proberen een alternatief.
-  const models=['gemini-3.5-flash-lite','gemini-3.7-flash'];
+  const models=['gemini-2.5-flash-lite','gemini-2.5-flash','gemini-3.5-flash-lite','gemini-3.7-flash'];
   for(const model of models){
     try{
       const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
         method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
         body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),
-        signal:AbortSignal.timeout(20000)
+        signal:AbortSignal.timeout(35000)
       });
       if(!r.ok){
         console.error('Gemini model mislukt:',model,'HTTP',r.status);
