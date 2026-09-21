@@ -6,3 +6,18 @@
 /* Mobiele vakgebiedkaarten: leesbaar op smalle schermen */
 @media(max-width:650px){.landing-card,.landing-card.featured{min-height:132px}.landing-copy strong{font-size:clamp(14px,3.7vw,18px);overflow-wrap:normal;hyphens:auto}.landing-copy small{font-size:12px}.landing-card{padding:12px;gap:8px}.landing-icon{font-size:30px}}
 @media(max-width:370px){.landing-categories{grid-template-columns:1fr}.landing-card,.landing-card.featured{flex-direction:row;align-items:center;min-height:95px}.landing-arrow{display:block}}
+
+/* KlusFix: heldere, consistente pictogrammen en kleurrijke accenten */
+.landing-card{position:relative;box-shadow:0 5px 18px #06130e38;background:linear-gradient(145deg,#204737,#16362c)}
+.landing-card.featured{background:linear-gradient(145deg,#23513d,#17392e);border-color:#46d99b}
+.landing-icon{display:flex;align-items:center;justify-content:center;width:52px;height:52px;min-width:52px;border-radius:13px;background:#ffffff0b}
+.trade-svg{display:block;width:38px;height:38px;color:#53e1a4}
+.trade-svg-schilder{color:#f4d34e}.trade-svg-schilder .paint-fill{fill:#f5d234;stroke:#f5d234}
+.trade-svg-stukadoor{color:#f4a765}.trade-svg-stukadoor .paint-fill{fill:#e8c8a8;stroke:#e8c8a8}
+.trade-svg-lekkage,.trade-svg-sanitair,.trade-svg-schimmel{color:#59cafa}
+.trade-svg-elektra{color:#ffd45c}.trade-svg-verwarming{color:#ff9871}
+.trade-svg-dak,.trade-svg-deuren{color:#e8c18c}.trade-svg-muren{color:#f0a98b}
+.trade-svg-vloer{color:#d2c3f9}.trade-svg-tuin{color:#80e79b}
+.trade-svg-ongedierte{color:#ffb66b}.trade-svg-apparatuur{color:#91caff}
+.landing-copy strong{overflow-wrap:normal;word-break:normal}.landing-card:focus-visible,.other-work:focus-visible{outline:3px solid #71f3ba;outline-offset:3px}
+@media(max-width:650px){.landing-card,.landing-card.featured{min-height:132px;padding:13px;gap:8px}.landing-icon{width:42px;height:42px;min-width:42px;border-radius:10px}.trade-svg{width:32px;height:32px}.landing-copy strong{font-size:16px}.landing-copy small{font-size:12px}.landing-categories{gap:10px}}

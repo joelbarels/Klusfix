@@ -1,9 +1,28 @@
 'use strict';
 const $=id=>document.getElementById(id);let token=sessionStorage.getItem('klusfix_token'),user=null,selected='',analysis=null,caseId=null,image=null,register=false;
 const categories=[['schilder','🎨','Schilderwerkzaamheden'],['stukadoor','🧱','Stukadoor'],['lekkage','💧','Lekkage / waterschade'],['verwarming','🔥','Verwarming'],['elektra','⚡','Elektra'],['sanitair','🚿','Sanitair'],['dak','🏠','Dak'],['muren','🧱','Muren / plafonds'],['vloer','🪵','Vloer'],['deuren','🚪','Deuren / ramen'],['schimmel','🦠','Schimmel / vocht'],['tuin','🌳','Tuin'],['ongedierte','🐜','Ongedierte'],['apparatuur','🔌','Apparatuur'],['overig','💡','Overige klus']];
-const landingDetails={schilder:['Schilder','Binnen- en buitenschilderwerk','▰'],stukadoor:['Stukadoor','Muren en plafonds stucen','◩'],lekkage:['Loodgieter','Lekkage, sanitair en water','♧'],verwarming:['Installateur','Verwarming en cv','♨'],elektra:['Elektricien','Elektra en stroom','ϟ'],sanitair:['Sanitair','Badkamer en toilet','♧'],dak:['Dakdekker','Dak en dakbedekking','⌂'],muren:['Muren','Metselwerk en herstel','▦'],vloer:['Vloer','Vloeren en afwerking','▤'],deuren:['Deuren','Deuren en kozijnen','▯'],schimmel:['Schimmel','Vochtbestrijding','♧'],tuin:['Tuin','Tuinaanleg en onderhoud','♧'],ongedierte:['Ongedierte','Ongediertebestrijding','♧'],apparatuur:['Apparatuur','Reparatie en installatie','▣'],overig:['Overige klus','Vertel ons wat je nodig hebt','✧']};
+const landingDetails={schilder:['Schilder','Binnen- en buitenschilderwerk'],stukadoor:['Stukadoor','Muren en plafonds stucen'],lekkage:['Loodgieter','Lekkage, sanitair en water'],verwarming:['Installateur','Verwarming en cv'],elektra:['Elektricien','Elektra en stroom'],sanitair:['Sanitair','Badkamer en toilet'],dak:['Dakdekker','Dak en dakbedekking'],muren:['Muren','Metselwerk en herstel'],vloer:['Vloer','Vloeren en afwerking'],deuren:['Deuren','Deuren en kozijnen'],schimmel:['Schimmel','Vochtbestrijding'],tuin:['Tuin','Tuinaanleg en onderhoud'],ongedierte:['Ongedierte','Ongediertebestrijding'],apparatuur:['Apparatuur','Reparatie en installatie'],overig:['Overige klus','Vertel ons wat je nodig hebt']};
+// Vaste SVG-lijniconen: geen emoji of externe iconenbibliotheek nodig.
+const iconPaths={
+schilder:'<path d="M4 4h13v7H4z M17 7h3a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-8v3 M12 18v4 M9 22h6"/><path class="paint-fill" d="M5 5h11v5H5z"/>',
+stukadoor:'<path d="M3 14 19 5l2 4-16 9z M9 16l4 6 M7 18l4 4"/><path class="paint-fill" d="M4 14 19 6l1 2-15 9z"/>',
+lekkage:'<path d="M12 2C9 7 5 11 5 15a7 7 0 0 0 14 0c0-4-4-8-7-13z M9 16a3 3 0 0 0 3 3"/>',
+verwarming:'<path d="M10 14V5a2 2 0 0 1 4 0v9a5 5 0 1 1-4 0z M12 9v9"/>',
+elektra:'<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
+sanitair:'<path d="M4 12h16v3a7 7 0 0 1-7 7h-2a7 7 0 0 1-7-7z M7 12V6a3 3 0 0 1 6 0 M11 6h4 M7 22v-2 M17 22v-2"/>',
+dak:'<path d="m2 11 10-8 10 8 M5 10v11h14V10 M9 21v-7h6v7"/>',
+muren:'<path d="M3 4h18v16H3z M3 9h18 M3 14h18 M3 19h18 M9 4v5 M16 9v5 M9 14v5"/>',
+vloer:'<path d="M3 3h18v18H3z M12 3v18 M3 12h18 M3 3l9 9 M12 12l9 9"/>',
+deuren:'<path d="M5 2h14v20H5z M8 5l8-1v16l-8-1z M13 12h1"/>',
+schimmel:'<path d="M12 3v18 M4 12h16 M6 6l12 12 M18 6 6 18 M12 3l-2 3 M12 3l2 3 M3 12l3-2 M3 12l3 2"/>',
+tuin:'<path d="M12 22V11 M12 15C4 15 3 9 4 5c6 0 8 4 8 10z M12 12c0-6 3-9 8-9 1 6-2 9-8 9z M7 22h10"/>',
+ongedierte:'<path d="M8 8a4 4 0 0 1 8 0 M7 12a5 5 0 0 1 10 0v5a5 5 0 0 1-10 0z M12 12v10 M4 10l3 2 M20 10l-3 2 M3 16h4 M21 16h-4 M5 21l3-3 M19 21l-3-3"/>',
+apparatuur:'<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="5"/><path d="M7 6h2 M12 6h5"/>',
+overig:'<path d="M12 2v4 M12 18v4 M2 12h4 M18 12h4 M5 5l3 3 M16 16l3 3 M19 5l-3 3 M8 16l-3 3"/>'};
+function tradeIcon(id){return `<svg class="trade-svg trade-svg-${id}" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[id]||iconPaths.overig}</svg>`}
+
 let pendingGuest=false;
-function renderLanding(){$('landingCategories').innerHTML=categories.filter(([id])=>id!=='overig').map(([id])=>{let [name,desc,icon]=landingDetails[id];return `<button type="button" class="landing-card ${id==='schilder'||id==='stukadoor'?'featured':''}" data-landing="${id}"><span class="landing-icon" aria-hidden="true">${icon}</span><span class="landing-copy"><strong>${esc(name)}</strong><small>${esc(desc)}</small></span><span class="landing-arrow" aria-hidden="true">›</span></button>`}).join('')}
+function renderLanding(){$('landingCategories').innerHTML=categories.filter(([id])=>id!=='overig').map(([id])=>{let [name,desc]=landingDetails[id];return `<button type="button" class="landing-card ${id==='schilder'||id==='stukadoor'?'featured':''}" data-landing="${id}"><span class="landing-icon">${tradeIcon(id)}</span><span class="landing-copy"><strong>${esc(name)}</strong><small>${esc(desc)}</small></span><span class="landing-arrow" aria-hidden="true">›</span></button>`}).join('')}
 function openWork(id){selected=id;image=null;analysis=null;$('description').value='';$('postcode').value=user?.postcode||'';$('photo').value='';$('aiConsent').checked=false;$('preview').innerHTML='';renderCategories();show('report')}
 $('landingCategories').onclick=e=>{let b=e.target.closest('[data-landing]');if(b)openWork(b.dataset.landing)};
 $('otherWork').onclick=()=>openWork('overig');
