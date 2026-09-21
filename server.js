@@ -8,7 +8,7 @@ try {
   databaseUrl=new URL(process.env.DATABASE_URL.trim());
   if(!['postgresql:','postgres:'].includes(databaseUrl.protocol)||!databaseUrl.hostname||!databaseUrl.username)throw Error('Ongeldige PostgreSQL-verbindingslink');
 } catch(e) { console.error('Databaseconfiguratie ongeldig:',e.message); process.exit(1); }
-const pool=new Pool({connectionString:process.env.DATABASE_URL.trim(),ssl:{rejectUnauthorized:false},max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});
+const pool=new Pool({connectionString:process.env.DATABASE_URL.trim(),ssl:{rejectUnauthorized:true},max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});
 pool.on('error',e=>console.error('Databasepoolfout:',e.code||e.message));
 async function checkDatabase(){
   console.log('Databasecontrole: gestart (poort '+(databaseUrl.port||'5432')+')');
@@ -28,8 +28,6 @@ async function read(req){return new Promise((resolve,reject)=>{let chunks=[],siz
 async function auth(req){let t=(req.headers.authorization||'').match(/^Bearer ([a-f0-9]{64})$/)?.[1];if(!t)return null;return (await q('SELECT u.* FROM public.kf_users u JOIN public.kf_sessions s ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires>$2',[sha(t),Date.now()]))[0]||null}
 async function login(res,u){let t=crypto.randomBytes(32).toString('hex');await q('INSERT INTO public.kf_sessions(token_hash,user_id,expires) VALUES($1,$2,$3)',[sha(t),u.id,Date.now()+7*864e5]);send(res,200,{token:t,user:safe(u)})}
 function fallback(cat,desc){return {source:'basisregels',urgency:/gaslucht|rook|vonken|brand|stroom op water/i.test(desc)?'Spoed':'Onbekend',possibleCauses:['Oorzaak niet vastgesteld; inspectie ter plaatse nodig'],advice:'Laat het probleem door een geschikte vakman beoordelen. Bij direct gevaar: ga naar een veilige plek en bel indien nodig 112.',trade:trades[cat]||'Allround klusbedrijf',disclaimer:'Geen diagnose. De foto is niet door AI beoordeeld.'}}
-const GEMINI_MODELS=['gemini-3.6-flash','gemini-3-flash'];
-const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function analyze(b){
   const base=fallback(b.category,b.description);
   if(!key)return base;
@@ -38,38 +36,31 @@ async function analyze(b){
     const [head,data]=b.image.split(',');
     if(data.length<5e6)parts.push({inline_data:{mime_type:head.slice(5,-7),data}});
   }
-  let lastError;
-  for(const model of GEMINI_MODELS){
-    for(let attempt=1;attempt<=2;attempt++){
-      try{
-        const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
-          method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
-          body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),
-          signal:AbortSignal.timeout(25000)
-        });
-        if(!response.ok){
-          const errorBody=(await response.text()).slice(0,1200);
-          const error=Error(`Gemini HTTP ${response.status} - ${errorBody}`);
-          error.geminiStatus=response.status;
-          throw error;
-        }
-        const json=await response.json();
-        const result=JSON.parse(json.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'{}');
-        if(!result||typeof result!=='object'||!Array.isArray(result.possibleCauses)||!result.advice)throw Error('Gemini gaf geen bruikbare analyse terug');
-        return {...base,urgency:['Spoed','Hoog','Normaal','Onbekend'].includes(result.urgency)?result.urgency:base.urgency,
-          possibleCauses:result.possibleCauses.slice(0,3).map(x=>String(x).slice(0,200)),
-          advice:String(result.advice).slice(0,1000),trade:trades[b.category],source:'gemini',
-          disclaimer:'AI-inschatting, geen definitieve diagnose.'};
-      }catch(error){
-        lastError=error;
-        console.warn('Gemini poging mislukt:',model,'poging',attempt,error.geminiStatus||error.name||'Error',String(error.message).slice(0,350));
-        const temporary=[429,500,502,503,504].includes(error.geminiStatus)||['TimeoutError','AbortError'].includes(error.name);
-        if(temporary&&attempt===1){await pause(1200);continue;}
-        break;
+  // Modelbeschikbaarheid verschilt per API-sleutel; 404/429/503 proberen een alternatief.
+  const models=['gemini-3.5-flash-lite','gemini-3.7-flash'];
+  for(const model of models){
+    try{
+      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+        method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
+        body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),
+        signal:AbortSignal.timeout(20000)
+      });
+      if(!r.ok){
+        console.error('Gemini model mislukt:',model,'HTTP',r.status);
+        if([404,429,500,502,503,504].includes(r.status))continue;
+        throw Error('Gemini HTTP '+r.status);
       }
-    }
+      const j=await r.json();
+      const raw=j.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'';
+      const v=JSON.parse(raw);
+      if(!v||typeof v!=='object'||Array.isArray(v)||!Array.isArray(v.possibleCauses)||typeof v.advice!=='string')throw Error('Ongeldig Gemini antwoord');
+      return {...base,urgency:['Spoed','Hoog','Normaal','Onbekend'].includes(v.urgency)?v.urgency:base.urgency,
+        possibleCauses:v.possibleCauses.slice(0,3).map(x=>String(x).slice(0,200)),
+        advice:v.advice.slice(0,1000),trade:trades[b.category],source:'gemini',
+        disclaimer:'AI-inschatting, geen definitieve diagnose.'};
+    }catch(e){console.error('Gemini analyse mislukt:',model,e.name==='TimeoutError'?'timeout':e.message);}
   }
-  throw lastError||Error('Gemini niet beschikbaar');
+  throw Error('Geen Gemini-model beschikbaar');
 }
 async function api(req,res,url){let route=url.pathname,m=req.method,b=['POST','PATCH'].includes(m)?await read(req):{};
 if(route==='/api/status'&&m==='GET'){await q('SELECT 1');return send(res,200,{database:'PostgreSQL',aiConfigured:!!key,mode:'private-test'})}
@@ -78,7 +69,7 @@ if(route==='/api/login'&&m==='POST'){let u=(await q('SELECT * FROM public.kf_use
 let u=await auth(req);if(!u)bad(401,'Log eerst in.');
 if(route==='/api/logout'&&m==='POST'){await q('DELETE FROM public.kf_sessions WHERE token_hash=$1',[sha((req.headers.authorization||'').slice(7))]);return send(res,200,{ok:true})}
 if(route==='/api/me'&&m==='GET')return send(res,200,{user:safe(u)});
-if(route==='/api/analyze'&&m==='POST'){if(u.role!=='consument')bad(403,'Alleen voor consumenten');if(!trades[b.category]||!String(b.description||'').trim())bad(400,'Selecteer categorie en omschrijving');if(b.image&&!b.aiConsent)bad(400,'Geef toestemming voor fotoanalyse');try{return send(res,200,{analysis:await analyze(b)})}catch(e){console.error('Gemini analyse mislukt:',e.geminiStatus||e.name||'Error',String(e.message||'Onbekende fout').replace(/AIza[\w-]+/g,'[API-SLEUTEL AFGESCHERMD]').slice(0,500));return send(res,503,{error:'AI niet beschikbaar',analysis:fallback(b.category,b.description)})}}
+if(route==='/api/analyze'&&m==='POST'){if(u.role!=='consument')bad(403,'Alleen voor consumenten');if(!trades[b.category]||!String(b.description||'').trim())bad(400,'Selecteer categorie en omschrijving');if(b.image&&!b.aiConsent)bad(400,'Geef toestemming voor fotoanalyse');try{return send(res,200,{analysis:await analyze(b)})}catch{return send(res,503,{error:'AI niet beschikbaar',analysis:fallback(b.category,b.description)})}}
 if(route==='/api/cases'&&m==='POST'){if(u.role!=='consument')bad(403,'Alleen voor consumenten');if(!trades[b.category]||!String(b.description||'').trim()||!String(b.postcode||'').trim())bad(400,'Categorie, omschrijving en postcode verplicht');let a=fallback(b.category,b.description);if(b.analysis&&typeof b.analysis==='object')a={source:['gemini','basisregels'].includes(b.analysis.source)?b.analysis.source:'basisregels',urgency:String(b.analysis.urgency||'Onbekend').slice(0,40),possibleCauses:Array.isArray(b.analysis.possibleCauses)?b.analysis.possibleCauses.slice(0,3).map(x=>String(x).slice(0,200)):a.possibleCauses,advice:String(b.analysis.advice||'').slice(0,1000),trade:trades[b.category],disclaimer:'Indicatie, geen diagnose.'};let id=uid();await q('INSERT INTO public.kf_cases(id,owner_id,category,description,postcode,analysis) VALUES($1,$2,$3,$4,$5,$6)',[id,u.id,b.category,String(b.description).slice(0,3000),String(b.postcode).slice(0,20),JSON.stringify(a)]);return send(res,201,{id})}
 if(route==='/api/cases'&&m==='GET')return send(res,200,{cases:await q('SELECT * FROM public.kf_cases WHERE owner_id=$1 ORDER BY created DESC',[u.id])});
 if(route==='/api/trades'&&m==='GET')return send(res,200,{trades:await q('SELECT id,name,trade,postcode FROM public.kf_users WHERE role=$1 AND trade=$2',['vakman',url.searchParams.get('trade')||''])});
