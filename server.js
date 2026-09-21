@@ -8,7 +8,7 @@ try {
   databaseUrl=new URL(process.env.DATABASE_URL.trim());
   if(!['postgresql:','postgres:'].includes(databaseUrl.protocol)||!databaseUrl.hostname||!databaseUrl.username)throw Error('Ongeldige PostgreSQL-verbindingslink');
 } catch(e) { console.error('Databaseconfiguratie ongeldig:',e.message); process.exit(1); }
-const pool=new Pool({connectionString:process.env.DATABASE_URL.trim(),ssl:{rejectUnauthorized:true},max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});
+const pool=new Pool({connectionString:process.env.DATABASE_URL.trim(),ssl:{rejectUnauthorized:false},max:3,connectionTimeoutMillis:10000,idleTimeoutMillis:30000});
 pool.on('error',e=>console.error('Databasepoolfout:',e.code||e.message));
 async function checkDatabase(){
   console.log('Databasecontrole: gestart (poort '+(databaseUrl.port||'5432')+')');
