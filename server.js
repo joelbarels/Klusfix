@@ -20,7 +20,7 @@ async function checkDatabase(){
 const q=(sql,args=[])=>pool.query(sql,args).then(r=>r.rows);
 const uid=()=>crypto.randomUUID(), sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 const key=process.env.GEMINI_API_KEY||'',port=Number(process.env.PORT||8080);
-const trades={lekkage:'Loodgieter',elektra:'Elektricien',verwarming:'Installateur',sanitair:'Loodgieter',dak:'Dakdekker',muren:'Stukadoor',vloer:'Vloerspecialist',deuren:'Timmerman',schimmel:'Vochtbestrijder',tuin:'Hovenier',ongedierte:'Ongediertebestrijder',apparatuur:'Reparateur'};
+const trades={schilder:'Schilder',stukadoor:'Stukadoor',lekkage:'Loodgieter',elektra:'Elektricien',verwarming:'Installateur',sanitair:'Loodgieter',dak:'Dakdekker',muren:'Stukadoor',vloer:'Vloerspecialist',deuren:'Timmerman',schimmel:'Vochtbestrijder',tuin:'Hovenier',ongedierte:'Ongediertebestrijder',apparatuur:'Reparateur'};
 const safe=u=>({id:u.id,email:u.email,role:u.role,name:u.name,trade:u.trade,postcode:u.postcode});
 function send(res,status,obj){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(obj))}
 function bad(status,message){let e=Error(message);e.status=status;throw e}

@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);let token=sessionStorage.getItem('klusfix_token'),user=null,selected='',analysis=null,caseId=null,image=null,register=false;
-const categories=[['lekkage','💧','Lekkage / waterschade'],['verwarming','🔥','Verwarming'],['elektra','⚡','Elektra'],['sanitair','🚿','Sanitair'],['dak','🏠','Dak'],['muren','🧱','Muren / plafonds'],['vloer','🪵','Vloer'],['deuren','🚪','Deuren / ramen'],['schimmel','🦠','Schimmel / vocht'],['tuin','🌳','Tuin'],['ongedierte','🐜','Ongedierte'],['apparatuur','🔌','Apparatuur']];
-const trades=['Loodgieter','Elektricien','Installateur','Dakdekker','Stukadoor','Vloerspecialist','Timmerman','Vochtbestrijder','Hovenier','Ongediertebestrijder','Reparateur','Allround klusbedrijf'];
+const categories=[['schilder','🎨','Schilderwerkzaamheden'],['stukadoor','🧱','Stukadoor'],['lekkage','💧','Lekkage / waterschade'],['verwarming','🔥','Verwarming'],['elektra','⚡','Elektra'],['sanitair','🚿','Sanitair'],['dak','🏠','Dak'],['muren','🧱','Muren / plafonds'],['vloer','🪵','Vloer'],['deuren','🚪','Deuren / ramen'],['schimmel','🦠','Schimmel / vocht'],['tuin','🌳','Tuin'],['ongedierte','🐜','Ongedierte'],['apparatuur','🔌','Apparatuur']];
+const trades=['Schilder','Stukadoor','Loodgieter','Elektricien','Installateur','Dakdekker','Vloerspecialist','Timmerman','Vochtbestrijder','Hovenier','Ongediertebestrijder','Reparateur','Allround klusbedrijf'];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function notice(t){$('notice').textContent=t;setTimeout(()=>{if($('notice').textContent===t)$('notice').textContent=''},6000)}
 function show(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('active',s.id===id));scrollTo(0,0)}
