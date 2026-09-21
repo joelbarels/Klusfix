@@ -28,7 +28,49 @@ async function read(req){return new Promise((resolve,reject)=>{let chunks=[],siz
 async function auth(req){let t=(req.headers.authorization||'').match(/^Bearer ([a-f0-9]{64})$/)?.[1];if(!t)return null;return (await q('SELECT u.* FROM public.kf_users u JOIN public.kf_sessions s ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires>$2',[sha(t),Date.now()]))[0]||null}
 async function login(res,u){let t=crypto.randomBytes(32).toString('hex');await q('INSERT INTO public.kf_sessions(token_hash,user_id,expires) VALUES($1,$2,$3)',[sha(t),u.id,Date.now()+7*864e5]);send(res,200,{token:t,user:safe(u)})}
 function fallback(cat,desc){return {source:'basisregels',urgency:/gaslucht|rook|vonken|brand|stroom op water/i.test(desc)?'Spoed':'Onbekend',possibleCauses:['Oorzaak niet vastgesteld; inspectie ter plaatse nodig'],advice:'Laat het probleem door een geschikte vakman beoordelen. Bij direct gevaar: ga naar een veilige plek en bel indien nodig 112.',trade:trades[cat]||'Allround klusbedrijf',disclaimer:'Geen diagnose. De foto is niet door AI beoordeeld.'}}
-async function analyze(b){let base=fallback(b.category,b.description);if(!key)return base;let parts=[{text:`Je bent een voorzichtige Nederlandstalige triage-assistent voor woningproblemen. Geef uitsluitend JSON met keys urgency (Spoed, Hoog, Normaal of Onbekend), possibleCauses (max 3 korte mogelijke oorzaken), advice (max 100 woorden), trade (vakman). Beschrijf onzekerheid; geen definitieve diagnose of aansprakelijkheid. Bij mogelijk gas, elektriciteit, brand of constructiegevaar adviseer direct veilig handelen en professionele hulp. Categorie: ${String(b.category).slice(0,50)}. Omschrijving: ${String(b.description).slice(0,2000)}`}];if(b.image&&/^data:image\/(jpeg|png|webp);base64,/.test(b.image)){let [head,data]=b.image.split(',');if(data.length<5e6)parts.push({inline_data:{mime_type:head.slice(5,-7),data}})}let r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent',{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),signal:AbortSignal.timeout(25000)});if(!r.ok){let detail='';try{const errorBody=await r.json();detail=String(errorBody?.error?.message||errorBody?.error?.status||'').slice(0,350)}catch{}const error=Error('Gemini HTTP '+r.status+(detail?' - '+detail:''));error.geminiStatus=r.status;throw error;}let j=await r.json(),v=JSON.parse(j.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'{}');return {...base,urgency:String(v.urgency||base.urgency).slice(0,40),possibleCauses:Array.isArray(v.possibleCauses)?v.possibleCauses.slice(0,3).map(x=>String(x).slice(0,200)):base.possibleCauses,advice:String(v.advice||base.advice).slice(0,1000),trade:trades[b.category],source:'gemini',disclaimer:'AI-inschatting, geen definitieve diagnose.'}}
+const GEMINI_MODELS=['gemini-3.6-flash','gemini-3-flash'];
+const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+async function analyze(b){
+  const base=fallback(b.category,b.description);
+  if(!key)return base;
+  const parts=[{text:`Je bent een voorzichtige Nederlandstalige triage-assistent voor woningproblemen. Geef uitsluitend JSON met keys urgency (Spoed, Hoog, Normaal of Onbekend), possibleCauses (max 3 korte mogelijke oorzaken), advice (max 100 woorden), trade (vakman). Beschrijf onzekerheid; geen definitieve diagnose of aansprakelijkheid. Bij mogelijk gas, elektriciteit, brand of constructiegevaar adviseer direct veilig handelen en professionele hulp. Categorie: ${String(b.category).slice(0,50)}. Omschrijving: ${String(b.description).slice(0,2000)}`}];
+  if(b.image&&/^data:image\/(jpeg|png|webp);base64,/.test(b.image)){
+    const [head,data]=b.image.split(',');
+    if(data.length<5e6)parts.push({inline_data:{mime_type:head.slice(5,-7),data}});
+  }
+  let lastError;
+  for(const model of GEMINI_MODELS){
+    for(let attempt=1;attempt<=2;attempt++){
+      try{
+        const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
+          method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},
+          body:JSON.stringify({contents:[{parts}],generationConfig:{responseMimeType:'application/json',temperature:0.2}}),
+          signal:AbortSignal.timeout(25000)
+        });
+        if(!response.ok){
+          const errorBody=(await response.text()).slice(0,1200);
+          const error=Error(`Gemini HTTP ${response.status} - ${errorBody}`);
+          error.geminiStatus=response.status;
+          throw error;
+        }
+        const json=await response.json();
+        const result=JSON.parse(json.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('')||'{}');
+        if(!result||typeof result!=='object'||!Array.isArray(result.possibleCauses)||!result.advice)throw Error('Gemini gaf geen bruikbare analyse terug');
+        return {...base,urgency:['Spoed','Hoog','Normaal','Onbekend'].includes(result.urgency)?result.urgency:base.urgency,
+          possibleCauses:result.possibleCauses.slice(0,3).map(x=>String(x).slice(0,200)),
+          advice:String(result.advice).slice(0,1000),trade:trades[b.category],source:'gemini',
+          disclaimer:'AI-inschatting, geen definitieve diagnose.'};
+      }catch(error){
+        lastError=error;
+        console.warn('Gemini poging mislukt:',model,'poging',attempt,error.geminiStatus||error.name||'Error',String(error.message).slice(0,350));
+        const temporary=[429,500,502,503,504].includes(error.geminiStatus)||['TimeoutError','AbortError'].includes(error.name);
+        if(temporary&&attempt===1){await pause(1200);continue;}
+        break;
+      }
+    }
+  }
+  throw lastError||Error('Gemini niet beschikbaar');
+}
 async function api(req,res,url){let route=url.pathname,m=req.method,b=['POST','PATCH'].includes(m)?await read(req):{};
 if(route==='/api/status'&&m==='GET'){await q('SELECT 1');return send(res,200,{database:'PostgreSQL',aiConfigured:!!key,mode:'private-test'})}
 if(route==='/api/register'&&m==='POST'){let email=String(b.email||'').trim().toLowerCase(),pw=String(b.password||''),name=String(b.name||'').trim(),role=b.role;if(!/^\S+@\S+\.\S+$/.test(email)||pw.length<10||pw.length>256||!name||name.length>120||!['consument','vakman'].includes(role))bad(400,'Vul naam, geldig e-mailadres en wachtwoord van minimaal 10 tekens in.');if(role==='vakman'&&!Object.values(trades).concat('Allround klusbedrijf').includes(b.trade))bad(400,'Kies een vakgebied.');let salt=crypto.randomBytes(16).toString('hex'),hash=salt+':'+crypto.scryptSync(pw,salt,64).toString('hex');try{let u=(await q('INSERT INTO public.kf_users(id,email,hash,role,name,trade,postcode) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *',[uid(),email,hash,role,name,role==='vakman'?b.trade:'',String(b.postcode||'').slice(0,20)]))[0];return login(res,u)}catch(e){if(e.code==='23505')bad(409,'Dit e-mailadres is al geregistreerd.');throw e}}
