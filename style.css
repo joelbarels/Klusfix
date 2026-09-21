@@ -21,3 +21,30 @@
 .trade-svg-ongedierte{color:#ffb66b}.trade-svg-apparatuur{color:#91caff}
 .landing-copy strong{overflow-wrap:normal;word-break:normal}.landing-card:focus-visible,.other-work:focus-visible{outline:3px solid #71f3ba;outline-offset:3px}
 @media(max-width:650px){.landing-card,.landing-card.featured{min-height:132px;padding:13px;gap:8px}.landing-icon{width:42px;height:42px;min-width:42px;border-radius:10px}.trade-svg{width:32px;height:32px}.landing-copy strong{font-size:16px}.landing-copy small{font-size:12px}.landing-categories{gap:10px}}
+
+/* KlusFix homepage — responsive uitvoering van het goedgekeurde ontwerp */
+body{background:radial-gradient(ellipse at 50% 0%,#07513c 0%,#073b2e 30%,#062a22 68%,#061e1a 100%);color:#f7fffb}
+header{max-width:1240px;padding:26px 28px 12px}
+.brand{font-size:clamp(38px,5vw,64px);letter-spacing:-2px}.brand span{color:#31d99a}
+#accountBtn{border:1px solid #38ae80;background:#0d4937;border-radius:14px;padding:12px 18px}
+main{max-width:1240px;padding:12px 28px 55px}
+#landing h2{font-size:clamp(30px,4.2vw,56px);line-height:1.12;margin:20px 0 5px;letter-spacing:-.03em}
+.intro{font-size:clamp(17px,2.3vw,27px);margin:0 0 23px}
+.landing-categories{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:13px}
+.landing-card,.landing-card.featured{grid-column:span 2;display:flex;flex-direction:row;align-items:center;gap:15px;min-height:116px;padding:17px 18px;margin:0;border:1px solid #38876b;border-radius:16px;background:linear-gradient(130deg,#104635,#0b392d);box-shadow:none}
+.landing-card.featured{grid-column:span 3;min-height:126px;border:2px solid #2cdd98;background:linear-gradient(130deg,#0b5039,#093a2e);box-shadow:0 0 18px #13cc8140}
+.landing-icon{width:65px;height:65px;min-width:65px;display:flex;align-items:center;justify-content:center;border-radius:0;background:transparent}
+.trade-svg{width:58px;height:58px;display:block;color:#fff;overflow:visible}
+.landing-copy{gap:5px}.landing-copy strong{font-size:clamp(17px,2vw,24px);line-height:1.15;overflow-wrap:normal}.landing-copy small{font-size:clamp(12px,1.45vw,17px);line-height:1.35;color:#d3e1db;overflow-wrap:normal}
+.landing-arrow{display:block;font-size:30px;color:#f3fff9;margin-left:auto}
+.other-work{margin:22px 0 0;min-height:112px;padding:19px 25px;background:linear-gradient(120deg,#104535,#0a3b2f);border:1px solid #36876a;border-radius:17px}
+.other-icon{font-size:52px;color:#33e6a2;line-height:1;min-width:75px;text-align:center}.other-work strong{font-size:clamp(17px,2vw,23px)}.other-work small{font-size:clamp(12px,1.5vw,17px);line-height:1.4}
+.landing-benefits{display:flex;justify-content:space-around;gap:12px;flex-wrap:wrap;padding:26px 0 0;color:#e5f9ef;font-size:clamp(12px,1.5vw,17px)}
+@media(max-width:700px){header{padding:19px 15px 10px}main{padding:10px 15px 38px}.brand{font-size:clamp(34px,8vw,47px)}#landing h2{font-size:clamp(28px,6vw,40px);margin:14px 0 5px}.intro{font-size:clamp(15px,3.7vw,19px);margin-bottom:20px}.landing-categories{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.landing-card,.landing-card.featured{grid-column:span 1;min-height:108px;padding:11px 10px;gap:8px;flex-direction:row;align-items:center}.landing-card.featured{min-height:116px}.landing-icon{width:37px;height:45px;min-width:37px}.trade-svg{width:37px;height:43px}.landing-copy{gap:4px}.landing-copy strong{font-size:clamp(12px,3.5vw,17px)}.landing-copy small{font-size:clamp(10px,2.65vw,13px);line-height:1.25}.landing-arrow{font-size:20px}.other-work{padding:13px 12px;gap:9px;min-height:95px;margin-top:15px}.other-icon{min-width:35px;font-size:35px}.other-work strong{font-size:15px}.other-work small{font-size:12px}.landing-benefits{font-size:12px;gap:10px;padding-top:22px}}
+@media(max-width:390px){.landing-card,.landing-card.featured{padding:10px 7px;gap:5px}.landing-icon{width:30px;min-width:30px}.trade-svg{width:30px;height:37px}.landing-arrow{font-size:16px}.landing-copy strong{font-size:12px}.landing-copy small{font-size:10px}}
+
+/* Icons are actual self-contained multicolour SVGs; never font glyphs. */
+.landing-icon{background:transparent!important;border-radius:0!important}
+.trade-svg{filter:drop-shadow(0 2px 2px rgba(0,0,0,.12));overflow:visible}
+@media(max-width:700px){.landing-card,.landing-card.featured{min-height:120px}.landing-icon{width:43px;min-width:43px;height:48px}.trade-svg{width:43px;height:48px}.landing-copy strong{font-size:clamp(13px,3.5vw,17px)}.landing-copy small{font-size:clamp(10px,2.65vw,13px)}}
+@media(max-width:390px){.landing-icon{width:37px;min-width:37px}.trade-svg{width:37px;height:44px}}

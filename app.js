@@ -4,22 +4,23 @@ const categories=[['schilder','🎨','Schilderwerkzaamheden'],['stukadoor','🧱
 const landingDetails={schilder:['Schilder','Binnen- en buitenschilderwerk'],stukadoor:['Stukadoor','Muren en plafonds stucen'],lekkage:['Loodgieter','Lekkage, sanitair en water'],verwarming:['Installateur','Verwarming en cv'],elektra:['Elektricien','Elektra en stroom'],sanitair:['Sanitair','Badkamer en toilet'],dak:['Dakdekker','Dak en dakbedekking'],muren:['Muren','Metselwerk en herstel'],vloer:['Vloer','Vloeren en afwerking'],deuren:['Deuren','Deuren en kozijnen'],schimmel:['Schimmel','Vochtbestrijding'],tuin:['Tuin','Tuinaanleg en onderhoud'],ongedierte:['Ongedierte','Ongediertebestrijding'],apparatuur:['Apparatuur','Reparatie en installatie'],overig:['Overige klus','Vertel ons wat je nodig hebt']};
 // Vaste SVG-lijniconen: geen emoji of externe iconenbibliotheek nodig.
 const iconPaths={
-schilder:'<path d="M4 4h13v7H4z M17 7h3a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-8v3 M12 18v4 M9 22h6"/><path class="paint-fill" d="M5 5h11v5H5z"/>',
-stukadoor:'<path d="M3 14 19 5l2 4-16 9z M9 16l4 6 M7 18l4 4"/><path class="paint-fill" d="M4 14 19 6l1 2-15 9z"/>',
-lekkage:'<path d="M12 2C9 7 5 11 5 15a7 7 0 0 0 14 0c0-4-4-8-7-13z M9 16a3 3 0 0 0 3 3"/>',
-verwarming:'<path d="M10 14V5a2 2 0 0 1 4 0v9a5 5 0 1 1-4 0z M12 9v9"/>',
-elektra:'<path d="m13 2-9 12h7l-1 8 10-13h-7z"/>',
-sanitair:'<path d="M4 12h16v3a7 7 0 0 1-7 7h-2a7 7 0 0 1-7-7z M7 12V6a3 3 0 0 1 6 0 M11 6h4 M7 22v-2 M17 22v-2"/>',
-dak:'<path d="m2 11 10-8 10 8 M5 10v11h14V10 M9 21v-7h6v7"/>',
-muren:'<path d="M3 4h18v16H3z M3 9h18 M3 14h18 M3 19h18 M9 4v5 M16 9v5 M9 14v5"/>',
-vloer:'<path d="M3 3h18v18H3z M12 3v18 M3 12h18 M3 3l9 9 M12 12l9 9"/>',
-deuren:'<path d="M5 2h14v20H5z M8 5l8-1v16l-8-1z M13 12h1"/>',
-schimmel:'<path d="M12 3v18 M4 12h16 M6 6l12 12 M18 6 6 18 M12 3l-2 3 M12 3l2 3 M3 12l3-2 M3 12l3 2"/>',
-tuin:'<path d="M12 22V11 M12 15C4 15 3 9 4 5c6 0 8 4 8 10z M12 12c0-6 3-9 8-9 1 6-2 9-8 9z M7 22h10"/>',
-ongedierte:'<path d="M8 8a4 4 0 0 1 8 0 M7 12a5 5 0 0 1 10 0v5a5 5 0 0 1-10 0z M12 12v10 M4 10l3 2 M20 10l-3 2 M3 16h4 M21 16h-4 M5 21l3-3 M19 21l-3-3"/>',
-apparatuur:'<rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="5"/><path d="M7 6h2 M12 6h5"/>',
-overig:'<path d="M12 2v4 M12 18v4 M2 12h4 M18 12h4 M5 5l3 3 M16 16l3 3 M19 5l-3 3 M8 16l-3 3"/>'};
-function tradeIcon(id){return `<svg class="trade-svg trade-svg-${id}" viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[id]||iconPaths.overig}</svg>`}
+schilder:'<path d="M4 5h12a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="#ffcf27" stroke="#fff"/><path d="M4 5h12" stroke="#fff6c8" stroke-width="1.5"/><path d="M18 8h2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-9v2" stroke="#f9ffff" stroke-width="1.8"/><path d="M13 12v3m3-3v2" stroke="#ffcf27" stroke-width="2.2"/><path d="M9 18h4v5a2 2 0 0 1-4 0Z" fill="#20c98a" stroke="#fff"/>',
+stukadoor:'<path d="M3 12 17 3l4 6L7 18Z" fill="#b5c8d8" stroke="#fff" stroke-width="1.5"/><path d="m5 12 12-8" stroke="#f6ffff" stroke-width="1.4"/><path d="m8 17-4 5" stroke="#f9ffff" stroke-width="2"/><path d="m3 22 5-6" stroke="#29d996" stroke-width="4"/>',
+lekkage:'<path d="M12 2C9 7 4 12 4 16a8 8 0 0 0 16 0c0-4-5-9-8-14Z" fill="#168ee5" stroke="#b4eaff" stroke-width="1.4"/><path d="M8 16c0 2 1 3 3 4" stroke="#d9f8ff" stroke-width="1.6"/>',
+verwarming:'<path d="M10 14V5a2 2 0 0 1 4 0v9a5 5 0 1 1-4 0Z" fill="#164b43" stroke="#fff" stroke-width="1.6"/><path d="M12 8v10" stroke="#ff7650" stroke-width="2.4"/><circle cx="12" cy="19" r="2.4" fill="#ff6948" stroke="none"/>',
+elektra:'<path d="m13 2-9 12h7l-1 8 10-13h-7Z" fill="#ffd044" stroke="#fff1b0" stroke-width="1.4"/>',
+sanitair:'<path d="M3 12h18v2a8 8 0 0 1-8 8h-2a8 8 0 0 1-8-8Z" fill="#1889d6" stroke="#fff" stroke-width="1.4"/><path d="M7 12V6a3 3 0 0 1 6 0m-2 0h5M8 22v-2m8 2v-2" stroke="#f5ffff" stroke-width="1.6"/>',
+dak:'<path d="m2 11 10-8 10 8" stroke="#ff7745" stroke-width="2.7"/><path d="M5 10v11h14V10M9 21v-7h6v7" stroke="#fff" stroke-width="1.5"/>',
+muren:'<rect x="2" y="4" width="20" height="16" rx="1" fill="#e86b4d" stroke="#fff"/><path d="M2 9h20M2 14h20M2 19h20M9 4v5m7 0v5m-7 0v5" stroke="#fff" stroke-width="1.4"/>',
+vloer:'<path d="M6 4h16l-5 16H2Z" fill="#839bc0" stroke="#fff" stroke-width="1.4"/><path d="M12 4 7 20M4 12h15" stroke="#fff" stroke-width="1.3"/>',
+deuren:'<path d="M5 2h14v20H5Z" stroke="#fff" stroke-width="1.5"/><path d="m8 5 8-1v16l-8-1Z" fill="#8c644a" stroke="#fff" stroke-width="1.3"/><circle cx="13" cy="12" r=".9" fill="#ffd34d" stroke="none"/>',
+schimmel:'<circle cx="12" cy="12" r="6.5" fill="#9263ca" stroke="#d9b9ff" stroke-width="1.5"/><path d="M12 1v4m0 14v4M1 12h4m14 0h4M4 4l3 3m10 10 3 3M20 4l-3 3M7 17l-3 3" stroke="#c8a0f6" stroke-width="2"/><circle cx="10" cy="10" r="1.3" fill="#e6d2ff" stroke="none"/>',
+tuin:'<path d="M12 22V11M12 15C4 15 3 9 4 5c6 0 8 4 8 10Zm0-3c0-6 3-9 8-9 1 6-2 9-8 9Z" fill="#2bbd76" stroke="#a9f6c5" stroke-width="1.4"/><path d="M7 22h10" stroke="#fff" stroke-width="1.5"/>',
+ongedierte:'<path d="M8 8a4 4 0 0 1 8 0M7 12a5 5 0 0 1 10 0v5a5 5 0 0 1-10 0Z" fill="#e66d50" stroke="#ffb196" stroke-width="1.5"/><path d="M12 12v10M4 10l3 2m13-2-3 2M3 16h4m14 0h-4M5 21l3-3m11 3-3-3" stroke="#ffb196" stroke-width="1.5"/>',
+apparatuur:'<rect x="4" y="2" width="16" height="20" rx="2" fill="#fff" stroke="#fff"/><circle cx="12" cy="14" r="5" fill="#167ab1" stroke="#85dcff" stroke-width="1.3"/><path d="M7 6h2m3 0h5" stroke="#218ad1" stroke-width="1.4"/>',
+overig:'<path d="M9 18h6m-5 3h4M9 15c-5-4-3-11 3-11s8 7 3 11l-1 3h-4Z" stroke="#44e5a5" stroke-width="1.5"/>'
+};
+function tradeIcon(id){return `<svg class="trade-svg trade-svg-${id}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[id]||iconPaths.overig}</svg>`}
 
 let pendingGuest=false;
 function renderLanding(){$('landingCategories').innerHTML=categories.filter(([id])=>id!=='overig').map(([id])=>{let [name,desc]=landingDetails[id];return `<button type="button" class="landing-card ${id==='schilder'||id==='stukadoor'?'featured':''}" data-landing="${id}"><span class="landing-icon">${tradeIcon(id)}</span><span class="landing-copy"><strong>${esc(name)}</strong><small>${esc(desc)}</small></span><span class="landing-arrow" aria-hidden="true">›</span></button>`}).join('')}
